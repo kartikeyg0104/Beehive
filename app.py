@@ -21,6 +21,9 @@ import fitz
 from PIL import Image
 import bcrypt
 from datetime import timedelta
+import google.generativeai as genai
+import traceback 
+
 
 from database.admindatahandler import  is_admin
 from database.userdatahandler import ( 
@@ -124,7 +127,90 @@ def upload_images(user_id):
         logging.error(f"Upload error: {str(e)}")  # Add logging
         return jsonify({'error': f'Error uploading file: {str(e)}'}), 500
 
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    raise ValueError("GOOGLE_API_KEY environment variable not set")
+genai.configure(api_key=api_key)
 
+for m in genai.list_models():
+    if 'generateContent' in m.supported_generation_methods:
+        # print model identifier for debugging/listing purposes
+        print(getattr(m, 'name', str(m)))
+
+@app.route('/api/analyze-media', methods=['POST'])
+def analyze_media():
+
+    image_file = request.files.get('image')
+    audio_file = request.files.get('audio')
+
+    prompt_parts = []
+
+    if image_file and image_file.mimetype == 'application/pdf':
+        return jsonify({
+            "title": "PDF Document Uploaded",
+            "description": "Please provide a description for this PDF file.",
+            "sentiment": "neutral"
+        })
+
+    if not image_file and not audio_file:
+        return jsonify({"error": "No media provided for analysis"}), 400
+
+    if image_file:
+        image_data = image_file.read()
+        image_parts = [{"mime_type": image_file.mimetype, "data": image_data}]
+        prompt_parts.extend(image_parts)
+        prompt_parts.append("\nAnalyze the image.")
+    # for audio file
+    if audio_file:
+        transcript = "This is a placeholder for the transcribed audio text."
+        prompt_parts.append(f"\nAlso consider this audio transcript: '{transcript}'.")
+        transcript = "This is a placeholder for the transcribed audio text." 
+        prompt_parts.append(f"\nAlso consider this audio transcript: '{transcript}'.")
+
+    prompt_parts.append(
+        """
+        Based on the media provided, generate ONLY a single, valid JSON object with the following keys:
+        1. "title": A short, descriptive title (max 10 words).
+        2. "description": A concise summary (2-3 sentences).
+        3. "sentiment": Classify the overall mood as strictly one of 'positive', 'neutral', or 'negative'.
+        Do not include any other text, explanations, or markdown formatting like ```json.
+        """
+    )
+
+    try:
+        model = genai.GenerativeModel('gemini-flash-latest')
+        response = model.generate_content(prompt_parts)
+
+        # Check if the response was blocked due to safety settings
+        if not response.parts:
+            error_message = f"Response was blocked. Feedback: {response.prompt_feedback}"
+            print(f"⚠️ {error_message}")
+            return jsonify({"error": "Content blocked by safety filters"}), 400
+
+        raw_text = response.text
+
+
+        # Use regex to find the JSON block, even if there's extra text
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group())
+                # Ensure required keys exist
+                if not all(k in parsed for k in ("title", "description", "sentiment")):
+                    logging.error(f"AI JSON missing keys: {parsed}")
+                    return jsonify({"error": "AI response JSON missing required keys"}), 500
+                return jsonify(parsed), 200
+            except Exception as e:
+                logging.error(f"Error parsing AI JSON: {e}\nRaw response: {raw_text}")
+                return jsonify({"error": "Failed to parse AI response JSON"}), 500
+        else:
+            logging.error(f"No JSON found in AI response: {raw_text}")
+            return jsonify({"error": "No JSON object found in AI response"}), 500
+
+    except Exception as e:
+        logging.error(f"analyze_media error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": f"Error analyzing media: {str(e)}"}), 500
 
 # generate thumbnail for the pdf
 def generate_pdf_thumbnail(pdf_path, filename):
