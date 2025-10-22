@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 import os
 import requests
 from decorators import require_admin_role
-from database.userdatahandler import get_daily_upload_trend, get_images_by_user, get_recent_uploads, get_upload_stats, get_uploads_analytics_summary, get_user_analytics_summary, get_daily_user_trend
+from database.userdatahandler import get_images_by_user, get_recent_uploads, get_upload_stats, get_upload_analytics, get_user_analytics
 
 # Create admin blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -152,25 +152,17 @@ def get_dashboard_data():
 @require_admin_role
 def get_all_analytics():
     try:
-        days_ago = 7  # Last one week
+        days_ago = 7
 
-        uploads_analytics = get_uploads_analytics_summary()
-        user_analytics = get_user_analytics_summary()
-        daily_upload_trend = get_daily_upload_trend(days_ago)
-        user_daily_trend = get_daily_user_trend(days_ago)
+        upload_data = get_upload_analytics(trend_days=days_ago)
+        user_data = get_user_analytics(trend_days=days_ago)
 
-        # Check if any returned None
-        if not uploads_analytics or not user_analytics:
-            return jsonify({
-                "error": "Failed to retrieve some analytics data"
-            }), 500
+        if not upload_data or not user_data:
+            return jsonify({"error": "Failed to retrieve analytics data"}), 500
 
-        # Combine all analytics data
         combined_data = {
-            "uploadStats": uploads_analytics,
-            "userStats": user_analytics,
-            "recentUploadTrends": daily_upload_trend,
-            "recentUserTrends": user_daily_trend
+            "uploads": upload_data,
+            "users": user_data
         }
 
         return jsonify(combined_data), 200

@@ -212,18 +212,15 @@ def get_all_users():
     users = beehive_user_collection.find({}, {'_id': 1, 'username': 1})
     return list(users)
 
-
-def get_uploads_analytics_summary():
+def get_upload_analytics(trend_days=7):
     try:
-        # Calculate date ranges (UTC)
-        today = datetime.utcnow()
-        start_of_this_month = today.replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_of_last_month = start_of_this_month - timedelta(seconds=1)
-        start_of_last_month = end_of_last_month.replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0)
+        # Date setup
+        today_utc = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_this_month = today_utc.replace(day=1)
+        start_of_last_month = (start_of_this_month - timedelta(days=1)).replace(day=1)
+        trend_start_date = today_utc - timedelta(days=trend_days - 1)
 
-        # Mongodb aggregation pipeline
+        # Pipeline
         pipeline = [
             {
                 '$facet': {
@@ -236,285 +233,137 @@ def get_uploads_analytics_summary():
                         {'$count': 'count'}
                     ],
                     'last_month_uploads': [
-                        {'$match': {'created_at': {
-                            '$gte': start_of_last_month, '$lt': start_of_this_month}}},
+                        {'$match': {'created_at': {'$gte': start_of_last_month, '$lt': start_of_this_month}}},
                         {'$count': 'count'}
+                    ],
+                    'daily_trend': [
+                        {'$match': {'created_at': {'$gte': trend_start_date}}},
+                        {'$group': {
+                            '_id': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$created_at', 'timezone': 'UTC'}},
+                            'count': {'$sum': 1}
+                        }},
+                        {'$sort': {'_id': 1}}
                     ]
                 }
             }
         ]
-
-        result = list(beehive_image_collection.aggregate(pipeline))
-        if not result or not result[0]['total_uploads']:
-            return {
-                'total': 0,
-                'breakdown': {
-                    'images': 0,
-                    'documents': 0,
-                },
-                'voice_notes': 0,
-                'increase': 0,
-                'timeframe': 'This month',
-                'sentimentAnalysis': {
-                    'positive': 0,
-                    'negative': 0,
-                    'neutral': 0,
-                    'custom': 0
-                }
-            }
-
-        data = result[0]
-
-        # Monthly counts
-        this_month_count = data['this_month_uploads'][0]['count'] if data.get(
-            'this_month_uploads') else 0
-        last_month_count = data['last_month_uploads'][0]['count'] if data.get(
-            'last_month_uploads') else 0
-
-        # Percentage increase
-        increase_percentage = 0.0
-        if last_month_count > 0:
-            increase_percentage = round(
-                ((this_month_count - last_month_count) / last_month_count) * 100, 2)
-        elif this_month_count > 0:
-            increase_percentage = 100.0
-
-        # Process file and sentiment counts
-        sentiment_counts = {item['_id']: item['count']
-                            for item in data.get('sentiments', []) if item['_id']}
-        file_counts = {item['_id']: item['count']
-                       for item in data.get('content_types', []) if item['_id']}
-        total_uploads = data['total_uploads'][0]['count']
-        image_count = file_counts.get('image', 0)
-        document_count = file_counts.get('document', 0)
-        voice_notes_count = data['voice_notes'][0]['count'] if data.get(
-            'voice_notes') else 0
-
-        # Final summary
-        known_sentiments = {'positive', 'negative', 'neutral'}
-        custom_count = sum(
-            count for sentiment, count in sentiment_counts.items()
-            if sentiment not in known_sentiments
+        
+        # Execute and process query
+        result = list(beehive_image_collection.aggregate(pipeline))[0]
+        
+        # Access results directly from the 'result' object.
+        this_month_count = result['this_month_uploads'][0]['count'] if result['this_month_uploads'] else 0
+        last_month_count = result['last_month_uploads'][0]['count'] if result['last_month_uploads'] else 0
+        increase_perc = (
+            round(((this_month_count - last_month_count) / last_month_count) * 100, 2)
+            if last_month_count > 0 else (100.0 if this_month_count > 0 else 0.0)
         )
-
-        return {
-            'total': total_uploads,
-            'breakdown': {
-                'images': image_count,
-                'documents': document_count,
-            },
-            'voiceNotes': voice_notes_count,
-            'increase': increase_percentage,
+        sentiment_counts = {item['_id']: item['count'] for item in result.get('sentiments', []) if item.get('_id')}
+        file_counts = {item['_id']: item['count'] for item in result.get('content_types', []) if item.get('_id')}
+        known_sentiments = {'positive', 'negative', 'neutral'}
+        
+        summary = {
+            'total': result['total_uploads'][0]['count'] if result['total_uploads'] else 0,
+            'breakdown': {'images': file_counts.get('image', 0), 'documents': file_counts.get('document', 0)},
+            'voiceNotes': result['voice_notes'][0]['count'] if result['voice_notes'] else 0,
+            'increase': increase_perc,
             'timeframe': 'This month',
             'sentimentAnalysis': {
                 'positive': sentiment_counts.get('positive', 0),
                 'negative': sentiment_counts.get('negative', 0),
                 'neutral': sentiment_counts.get('neutral', 0),
-                'custom': custom_count
-            },
+                'custom': sum(count for sentiment, count in sentiment_counts.items() if sentiment not in known_sentiments)
+            }
         }
+        
+        # Process trend
+        upload_map = {item['_id']: item['count'] for item in result['daily_trend']}
+        trend, prev_count = [], 0
+        for i in range(trend_days):
+            date_str = (trend_start_date + timedelta(days=i)).strftime('%Y-%m-%d')
+            count = upload_map.get(date_str, 0)
+            increase = round(((count - prev_count) / prev_count) * 100, 2) if prev_count > 0 else (100.0 if count > 0 else 0.0)
+            trend.append({'date': date_str, 'uploads': {'total': count, 'increase': increase}})
+            prev_count = count
+
+        return {'summary': summary, 'trend': trend}
 
     except Exception as e:
-        print(f"Error getting analytics summary: {e}")
+        print(f"Error getting upload analytics: {e}")
         return None
 
-def get_daily_upload_trend(days_ago=7):
-    try:
-        today_utc = datetime.utcnow().replace(tzinfo=timezone.utc, hour=0,
-                                              minute=0, second=0, microsecond=0)
-        start_date_utc = today_utc - timedelta(days=days_ago - 1)
-
-        # Aggregate daily uploads
-        pipeline = [
-            {'$match': {'created_at': {'$gte': start_date_utc}}},
-            {'$group': {'_id': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$created_at', 'timezone': 'UTC'}},
-                        'total_uploads': {'$sum': 1}}}
-        ]
-        daily_counts = list(beehive_image_collection.aggregate(pipeline))
-        upload_map = {item['_id']: item['total_uploads'] for item in daily_counts}
-
-        final_trend = []
-        prev_count = 0
-        current_date = start_date_utc
-
-        # Generate continuous daily data
-        while current_date <= today_utc:
-            date_str = current_date.strftime('%Y-%m-%d')
-            count = upload_map.get(date_str, 0)
-
-            increase = 0.0
-            if prev_count > 0:
-                increase = round(((count - prev_count) / prev_count) * 100, 2)
-            elif count > 0:
-                increase = 100.0
-
-            final_trend.append({'date': date_str, 'uploads': {
-                               'total': count, 'increase': increase}})
-            prev_count = count
-            current_date += timedelta(days=1)
-
-        return final_trend
-
-    except Exception as e:
-        print(f"Error getting daily upload trend: {e}")
-        return []
-
-# Helper function to fetch users from clerk with pagination
 def _fetch_clerk_users(params):
-    clerk_api_key = os.getenv('CLERK_SECRET_KEY')
-    if not clerk_api_key:
-        raise ValueError("CLERK_SECRET_KEY environment variable not set.")
-
-    headers = {'Authorization': f'Bearer {clerk_api_key}'}
-    base_url = 'https://api.clerk.com/v1/users'
-    all_users = []
-    limit, offset = 200, 0
-
+    # This is your helper function from the original code
+    headers = {'Authorization': f'Bearer {os.getenv("CLERK_SECRET_KEY")}'}
+    all_users, limit, offset = [], 200, 0
     while True:
-        paginated_params = params.copy()
-        paginated_params['limit'] = limit
-        paginated_params['offset'] = offset
-        
-        response = requests.get(base_url, headers=headers, params=paginated_params)
+        paginated_params = {**params, 'limit': limit, 'offset': offset}
+        response = requests.get('https://api.clerk.com/v1/users', headers=headers, params=paginated_params)
         response.raise_for_status()
         users_page = response.json()
-
-        if not users_page:
-            break
-
+        if not users_page: break
         all_users.extend(users_page)
         offset += limit
-    
     return all_users
 
-def get_user_analytics_summary():
+def get_user_analytics(trend_days=7):
     try:
-        clerk_api_key = os.getenv('CLERK_SECRET_KEY')
-        if not clerk_api_key:
-            raise ValueError("CLERK_SECRET_KEY environment variable not set.")
+        # Date setup
+        today_utc = datetime.now(timezone.utc)
+        start_of_this_month = today_utc.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        start_of_last_month = (start_of_this_month - timedelta(days=1)).replace(day=1)
+        trend_start_date = today_utc.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=trend_days - 1)
+        fetch_since_ms = int(start_of_last_month.timestamp() * 1000)
         
-        headers = {'Authorization': f'Bearer {clerk_api_key}'}
-
-        count_response = requests.get('https://api.clerk.com/v1/users/count', headers=headers)
+        # Fetch data once
+        all_new_users = _fetch_clerk_users({'created_at_after': fetch_since_ms})
+        all_active_users = _fetch_clerk_users({'last_sign_in_at_after': fetch_since_ms})
+        
+        count_response = requests.get('https://api.clerk.com/v1/users/count', headers={'Authorization': f'Bearer {os.getenv("CLERK_SECRET_KEY")}'})
         count_response.raise_for_status()
         overall_total_users = count_response.json().get('total_count', 0)
 
-        # Date setup
-        today = datetime.now(timezone.utc)
-        start_of_this_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        start_of_last_month = (start_of_this_month - timedelta(days=1)).replace(day=1)
-        active_threshold_30_days = today - timedelta(days=30)
+        # Process data for summary and trend
+        new_this_month, new_last_month = 0, 0
+        active_this_month, active_last_month, active_total_30_days = 0, 0, 0
+        daily_new = { (trend_start_date + timedelta(days=i)).strftime('%Y-%m-%d'): 0 for i in range(trend_days) }
+        daily_active = { (trend_start_date + timedelta(days=i)).strftime('%Y-%m-%d'): 0 for i in range(trend_days) }
+
+        for user in all_new_users:
+            created_at = datetime.fromtimestamp(user['created_at'] / 1000, tz=timezone.utc)
+            if start_of_this_month <= created_at: new_this_month += 1
+            elif start_of_last_month <= created_at: new_last_month += 1
+            date_str = created_at.strftime('%Y-%m-%d')
+            if date_str in daily_new: daily_new[date_str] += 1
         
-        start_date_ms = int(start_of_last_month.timestamp() * 1000)
-
-        # Fetch recent user data
-        recently_created_users = _fetch_clerk_users({'created_at_after': start_date_ms})
-        recently_active_users = _fetch_clerk_users({'last_sign_in_at_after': start_date_ms})
-
-        new_users_this_month = 0
-        new_users_last_month = 0
-        active_users_total = 0 # Active in last 30 days
-        active_users_this_month = 0
-        active_users_last_month = 0
-
-        # Process new user data for the increase percentage
-        for user in recently_created_users:
-            created_at = datetime.fromtimestamp(user.get('created_at', 0) / 1000, tz=timezone.utc)
-            if start_of_this_month <= created_at:
-                new_users_this_month += 1
-            elif start_of_last_month <= created_at < start_of_this_month:
-                new_users_last_month += 1
+        for user in all_active_users:
+            last_sign_in_at = datetime.fromtimestamp(user['last_sign_in_at'] / 1000, tz=timezone.utc)
+            if last_sign_in_at >= today_utc - timedelta(days=30): active_total_30_days += 1
+            if start_of_this_month <= last_sign_in_at: active_this_month += 1
+            elif start_of_last_month <= last_sign_in_at: active_last_month += 1
+            date_str = last_sign_in_at.strftime('%Y-%m-%d')
+            if date_str in daily_active: daily_active[date_str] += 1
         
-        # Process active user data
-        for user in recently_active_users:
-            if user.get('last_sign_in_at'):
-                last_sign_in_at = datetime.fromtimestamp(user.get('last_sign_in_at') / 1000, tz=timezone.utc)
-                if last_sign_in_at >= active_threshold_30_days:
-                    active_users_total += 1
-                if start_of_this_month <= last_sign_in_at:
-                    active_users_this_month += 1
-                elif start_of_last_month <= last_sign_in_at < start_of_this_month:
-                    active_users_last_month += 1
-
-        # Note: 'total_users_increase' is based on NEW users this month vs. last month.
-        total_users_increase = (
-            round(((new_users_this_month - new_users_last_month) / new_users_last_month) * 100, 2)
-            if new_users_last_month > 0 else (100.0 if new_users_this_month > 0 else 0.0)
-        )
-        active_users_increase = (
-            round(((active_users_this_month - active_users_last_month) / active_users_last_month) * 100, 2)
-            if active_users_last_month > 0 else (100.0 if active_users_this_month > 0 else 0.0)
-        )
-
-        return {
-            'users': {'total': overall_total_users, 'increase': total_users_increase},
-            'activeUsers': {'total': active_users_total, 'increase': active_users_increase},
+        # Build summary
+        new_increase = round(((new_this_month - new_last_month) / new_last_month) * 100, 2) if new_last_month > 0 else (100.0 if new_this_month > 0 else 0.0)
+        active_increase = round(((active_this_month - active_last_month) / active_last_month) * 100, 2) if active_last_month > 0 else (100.0 if active_this_month > 0 else 0.0)
+        summary = {
+            'users': {'total': overall_total_users, 'increase': new_increase},
+            'activeUsers': {'total': active_total_30_days, 'increase': active_increase},
             'timeframe': 'This month'
         }
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching data from Clerk API: {e}")
-        return None
+        # Build trend
+        trend, prev_new, prev_active = [], 0, 0
+        for date_str in sorted(daily_new.keys()):
+            new_count, active_count = daily_new[date_str], daily_active[date_str]
+            new_inc = round(((new_count - prev_new) / prev_new) * 100, 2) if prev_new > 0 else (100.0 if new_count > 0 else 0.0)
+            active_inc = round(((active_count - prev_active) / prev_active) * 100, 2) if prev_active > 0 else (100.0 if active_count > 0 else 0.0)
+            trend.append({'date': date_str, 'users': {'total': new_count, 'increase': new_inc}, 'activeUsers': {'total': active_count, 'increase': active_inc}})
+            prev_new, prev_active = new_count, active_count
+        
+        return {'summary': summary, 'trend': trend}
+
     except Exception as e:
         print(f"An error occurred in user analytics: {e}")
-        return None 
-
-def get_daily_user_trend(days_ago=7):
-    try:
-        # Date Setup
-        today_utc = datetime.utcnow().replace(tzinfo=timezone.utc, hour=0, minute=0, second=0, microsecond=0)
-        start_date_utc = today_utc - timedelta(days=days_ago - 1)
-        start_date_ms = int(start_date_utc.timestamp() * 1000)
-
-        # Get users created within the date range
-        recently_created_users = _fetch_clerk_users({'created_at_after': start_date_ms})
-        
-        # Get users active within the date range
-        recently_active_users = _fetch_clerk_users({'last_sign_in_at_after': start_date_ms})
-
-        # Make list of all dates
-        new_users_map = {}
-        active_users_map = {}
-        current_date = start_date_utc
-        while current_date <= today_utc:
-            date_str = current_date.strftime('%Y-%m-%d')
-            new_users_map[date_str] = 0
-            active_users_map[date_str] = 0
-            current_date += timedelta(days=1)
-
-        # Populate counts from correct lists
-        for user in recently_created_users:
-            created_at_str = datetime.fromtimestamp(user.get('created_at', 0) / 1000, tz=timezone.utc).strftime('%Y-%m-%d')
-            if created_at_str in new_users_map:
-                new_users_map[created_at_str] += 1
-        
-        for user in recently_active_users:
-            if user.get('last_sign_in_at'):
-                last_sign_in_str = datetime.fromtimestamp(user.get('last_sign_in_at') / 1000, tz=timezone.utc).strftime('%Y-%m-%d')
-                if last_sign_in_str in active_users_map:
-                    active_users_map[last_sign_in_str] += 1
-
-        # Compute trends
-        final_trend, prev_new, prev_active = [], 0, 0
-        for date_str in sorted(new_users_map.keys()):
-            new_count = new_users_map[date_str]
-            active_count = active_users_map[date_str]
-
-            new_increase = round(((new_count - prev_new) / prev_new) * 100, 2) if prev_new > 0 else (100.0 if new_count > 0 else 0.0)
-            active_increase = round(((active_count - prev_active) / prev_active) * 100, 2) if prev_active > 0 else (100.0 if active_count > 0 else 0.0)
-
-            final_trend.append({
-                'date': date_str,
-                'users': {'total': new_count, 'increase': new_increase},
-                'activeUsers': {'total': active_count, 'increase': active_increase},
-            })
-            prev_new, prev_active = new_count, active_count
-
-        return final_trend
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching data from Clerk API: {e}")
-        return []
-    except Exception as e:
-        print(f"An error occurred in user daily trend: {e}")
-        return []
+        return None
