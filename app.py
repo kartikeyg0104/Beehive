@@ -21,6 +21,9 @@ import fitz
 from PIL import Image
 import bcrypt
 from datetime import timedelta
+import google.generativeai as genai
+import traceback 
+
 
 from database.admindatahandler import  is_admin
 from database.userdatahandler import ( 
@@ -73,6 +76,7 @@ flow = Flow.from_client_secrets_file(
 )
     
 # Upload images 
+# Upload images 
 @app.route('/api/user/upload/<user_id>', methods=['POST'])
 def upload_images(user_id):
     try:
@@ -81,7 +85,8 @@ def upload_images(user_id):
         title = request.form.get('title', '')
         sentiment = request.form.get('sentiment')
         description = request.form.get('description', '')
-        audio_data = request.form.get('audioData')
+        audio_data = request.form.get('audioData')  # Base64 audio from browser (optional)
+        audio_file = request.files.get('audio')     # Uploaded audio file (optional)
 
         if not files or not files[0]:
             return jsonify({'error': 'No file selected'}), 400
@@ -89,11 +94,11 @@ def upload_images(user_id):
         if not title or not description:
             return jsonify({'error': 'Title and description are required'}), 400
 
-        # notification_collection = get_beehive_notification_collection()
+        audio_filename = None  
 
         for file in files:
             if file:
-                # Check file extension
+                # Validate extension
                 filename = secure_filename(file.filename)
                 file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
                 if file_ext not in ALLOWED_EXTENSIONS:
@@ -108,8 +113,7 @@ def upload_images(user_id):
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
                 file.save(filepath)
 
-                # Handle audio file if provided
-                audio_filename = None
+                # Handle audio upload (either base64 or file)
                 if audio_data:
                     audio_filename = f"{secure_filename(title)}.wav"
                     audio_path = os.path.join(app.config['UPLOAD_FOLDER'], audio_filename)
@@ -118,6 +122,13 @@ def upload_images(user_id):
                     with open(audio_path, "wb") as f:
                         f.write(audio_binary)
 
+                elif audio_file:
+                    audio_filename = secure_filename(audio_file.filename)
+                    audio_path = os.path.join(app.config['UPLOAD_FOLDER'], audio_filename)
+                    os.makedirs(os.path.dirname(audio_path), exist_ok=True)
+                    audio_file.save(audio_path)
+
+                # Always safe to call now
                 time_created = datetime.datetime.now()
                 save_image(user_id, filename, filetype, title, description, time_created, audio_filename, sentiment)
                 save_notification(user_id, username, filename, title, time_created, sentiment)
@@ -133,6 +144,87 @@ def upload_images(user_id):
         return jsonify({'error': f'Error uploading file: {str(e)}'}), 500
 
 
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    raise ValueError("GOOGLE_API_KEY environment variable not set")
+genai.configure(api_key=api_key)
+
+for m in genai.list_models():
+    if 'generateContent' in m.supported_generation_methods:
+        pass
+
+@app.route('/api/analyze-media', methods=['POST'])
+def analyze_media():
+
+    image_file = request.files.get('image')
+    audio_file = request.files.get('audio')
+
+    prompt_parts = []
+
+    if image_file and image_file.mimetype == 'application/pdf':
+        return jsonify({
+            "title": "PDF Document Uploaded",
+            "description": "Please provide a description for this PDF file.",
+            "sentiment": "neutral"
+        })
+
+    if not image_file and not audio_file:
+        return jsonify({"error": "No media provided for analysis"}), 400
+
+    if image_file:
+        image_data = image_file.read()
+        image_parts = [{"mime_type": image_file.mimetype, "data": image_data}]
+        prompt_parts.extend(image_parts)
+        prompt_parts.append("\nAnalyze the image.")
+    # for audio file
+    if audio_file:
+        transcript = "This is a placeholder for the transcribed audio text."
+        prompt_parts.append(f"\nAlso consider this audio transcript: '{transcript}'.")
+
+    prompt_parts.append(
+        """
+        Based on the media provided, generate ONLY a single, valid JSON object with the following keys:
+        1. "title": A short, descriptive title (max 10 words).
+        2. "description": A concise summary (2-3 sentences).
+        3. "sentiment": Classify the overall mood as strictly one of 'positive', 'neutral', or 'negative'.
+        Do not include any other text, explanations, or markdown formatting like ```json.
+        """
+    )
+
+    try:
+        model = genai.GenerativeModel('gemini-flash-latest')
+        response = model.generate_content(prompt_parts)
+
+        # Check if the response was blocked due to safety settings
+        if not response.parts:
+            error_message = f"Response was blocked. Feedback: {response.prompt_feedback}"
+            print(f"⚠️ {error_message}")
+            return jsonify({"error": "Content blocked by safety filters"}), 400
+
+        raw_text = response.text
+
+
+        # Use regex to find the JSON block, even if there's extra text
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group())
+                # Ensure required keys exist
+                if not all(k in parsed for k in ("title", "description", "sentiment")):
+                    logging.error(f"AI JSON missing keys: {parsed}")
+                    return jsonify({"error": "AI response JSON missing required keys"}), 500
+                return jsonify(parsed), 200
+            except Exception as e:
+                logging.error(f"Error parsing AI JSON: {e}\nRaw response: {raw_text}")
+                return jsonify({"error": "Failed to parse AI response JSON"}), 500
+        else:
+            logging.error(f"No JSON found in AI response: {raw_text}")
+            return jsonify({"error": "No JSON object found in AI response"}), 500
+
+    except Exception as e:
+        logging.error(f"analyze_media error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": f"Error analyzing media: {str(e)}"}), 500
 
 # generate thumbnail for the pdf
 def generate_pdf_thumbnail(pdf_path, filename):
