@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 import os
 import requests
 from decorators import require_admin_role
-from database.userdatahandler import get_images_by_user, get_recent_uploads, get_upload_stats
+from database.userdatahandler import get_daily_upload_trend, get_images_by_user, get_recent_uploads, get_upload_stats, get_uploads_analytics_summary, get_user_analytics_summary, get_daily_user_trend
 
 # Create admin blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -146,3 +146,35 @@ def get_dashboard_data():
     except Exception as e:
         print(f"Error fetching dashboard data: {str(e)}")
         return jsonify({'error': 'Failed to fetch dashboard data'}), 500
+    
+
+@admin_bp.route('/analytics', methods=['GET'])
+@require_admin_role
+def get_all_analytics():
+    try:
+        days_ago = 7  # Last one week
+
+        uploads_analytics = get_uploads_analytics_summary()
+        user_analytics = get_user_analytics_summary()
+        daily_upload_trend = get_daily_upload_trend(days_ago)
+        user_daily_trend = get_daily_user_trend(days_ago)
+
+        # Check if any returned None
+        if not uploads_analytics or not user_analytics:
+            return jsonify({
+                "error": "Failed to retrieve some analytics data"
+            }), 500
+
+        # Combine all analytics data
+        combined_data = {
+            "uploadStats": uploads_analytics,
+            "userStats": user_analytics,
+            "recentUploadTrends": daily_upload_trend,
+            "recentUserTrends": user_daily_trend
+        }
+
+        return jsonify(combined_data), 200
+
+    except Exception as e:
+        print(f"Error fetching combined analytics: {str(e)}")
+        return jsonify({"error": "Failed to fetch analytics data"}), 500
