@@ -265,8 +265,8 @@ def edit_image(image_id):
         if not image:
             return jsonify({'error': 'Image not found.'}), 404
         # verify the ownership
-        current_user_id = str(request.current_user.get('id'))
-        image_owner_id = str(image.get('user_id'))
+        current_user_id = request.current_user['id']
+        image_owner_id = image['user_id']
 
         if current_user_id != image_owner_id:
             return jsonify({'error': 'Unauthorized: You do not own this image.'}), 403
