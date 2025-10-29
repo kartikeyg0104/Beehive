@@ -29,7 +29,7 @@ from database.admindatahandler import  is_admin
 from database.userdatahandler import ( 
     delete_image,
     get_image_by_id,
-    get_images_by_user, 
+    get_images_by_user,
     get_user_by_username, 
     save_image, 
     update_image,
@@ -45,7 +45,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from oauth.config import ALLOWED_EMAILS, GOOGLE_CLIENT_ID
 
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'heif', 'pdf'}
+ALLOWED_EXTENSIONS =  {'jpg', 'jpeg', 'png', 'gif', 'webp', 'heif', 'pdf'}
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app, resources={
@@ -101,7 +101,6 @@ def upload_images(user_id):
                 if file_ext not in ALLOWED_EXTENSIONS:
                     return jsonify({'error': f'File type not allowed. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
 
-                # Save uploaded image/PDF
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
                 file.save(filepath)
