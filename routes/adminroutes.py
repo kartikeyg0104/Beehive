@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 import os
 import requests
 from decorators import require_admin_role
-from database.userdatahandler import get_images_by_user, get_recent_uploads, get_upload_stats
+from database.userdatahandler import get_images_by_user, get_recent_uploads, get_upload_stats, get_upload_analytics, get_user_analytics
 
 # Create admin blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -146,3 +146,27 @@ def get_dashboard_data():
     except Exception as e:
         print(f"Error fetching dashboard data: {str(e)}")
         return jsonify({'error': 'Failed to fetch dashboard data'}), 500
+    
+
+@admin_bp.route('/analytics', methods=['GET'])
+@require_admin_role
+def get_all_analytics():
+    try:
+        days_ago = 7
+
+        upload_data = get_upload_analytics(trend_days=days_ago)
+        user_data = get_user_analytics(trend_days=days_ago)
+
+        if not upload_data or not user_data:
+            return jsonify({"error": "Failed to retrieve analytics data"}), 500
+
+        combined_data = {
+            "uploads": upload_data,
+            "users": user_data
+        }
+
+        return jsonify(combined_data), 200
+
+    except Exception as e:
+        print(f"Error fetching combined analytics: {str(e)}")
+        return jsonify({"error": "Failed to fetch analytics data"}), 500
