@@ -37,7 +37,7 @@ const MainLayout = () => {
                 </button>
               )}
               <div className="flex-shrink-0 flex items-center">
-                <Link to="/" className="text-2xl font-bold text-black">
+                <Link to="/" className="text-2xl font-bold trasition-colors duration-200">
                   <img src="/favicon.png" alt="Beehive Logo" className="h-8 w-8 inline-block mr-2" />
                   Beehive
                 </Link>
