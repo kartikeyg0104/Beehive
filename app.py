@@ -264,7 +264,13 @@ def edit_image(image_id):
         image = get_image_by_id(image_id)
         if not image:
             return jsonify({'error': 'Image not found.'}), 404
+        # verify the ownership
+        current_user_id = request.current_user['id']
+        image_owner_id = image['user_id']
 
+        if current_user_id != image_owner_id:
+            return jsonify({'error': 'Unauthorized: You do not own this image.'}), 403
+        
         # Update the image
         update_image(image_id, title, description, sentiment)
         return jsonify({'message': 'Image updated successfully!'}), 200
@@ -290,7 +296,13 @@ def delete_image_route(image_id):
         image = get_image_by_id(image_id)
         if not image:
             return jsonify({'error': 'Image not found.'}), 404
+        #verify the ownership of user
+        current_user_id = str(request.current_user.get('id'))
+        image_owner_id = str(image.get('user_id'))
 
+        if current_user_id != image_owner_id:
+            return jsonify({'error': 'Unauthorized: You do not own this image.'}), 403
+        
         # Delete image file from upload directory
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], image['filename'])
         if os.path.exists(filepath):
@@ -316,10 +328,11 @@ def delete_image_route(image_id):
         return jsonify({'error': f'Error deleting image: {str(e)}'}), 500
 
 # Get all images uploaded by a user
-@app.route('/api/user/user_uploads/<user_id>')
+@app.route('/api/user/user_uploads')
 @require_auth
-def user_images_show(user_id):
+def user_images_show():
     try:
+        user_id = request.current_user['id']
         images = get_images_by_user(user_id)
         images_list = list(images) if images else []        
         response_data = {

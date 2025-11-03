@@ -130,7 +130,7 @@ const Gallery = () => {
         // Get the authentication token from Clerk
         const token = await window.Clerk.session?.getToken();
         
-        const response = await fetch(`http://127.0.0.1:5000/api/user/user_uploads/${user.id}`, {
+        const response = await fetch(`http://127.0.0.1:5000/api/user/user_uploads`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
