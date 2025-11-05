@@ -228,7 +228,7 @@ const Upload = () => {
       }
       // Make the upload request
       const token = await clerk.session?.getToken();
-      const response = await fetch(`http://127.0.0.1:5000/api/user/upload/${user.id}`, {
+      const response = await fetch(`http://127.0.0.1:5000/api/user/upload`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
