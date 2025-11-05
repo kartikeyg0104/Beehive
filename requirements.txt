@@ -45,3 +45,4 @@ isort
 pre-commit
 pytest-flask
 google-generativeai
+python-magic
