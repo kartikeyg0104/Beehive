@@ -13,7 +13,7 @@ const AdminLayout = () => {
 
   const navigate = useNavigate();
 
-  const isAdmin = user?.unsafeMetadata?.role === 'admin';
+  const isAdmin = user?.publicMetadata?.role === 'admin';
 
   const adminNavigation = [
     { name: 'Dashboard', href: '/admin' },
@@ -251,7 +251,7 @@ const AdminLayout = () => {
         <>
           {/* Overlay */}
           <div
-            className="fixed inset-0 z-40 bg-black bg-opacity-40 transition-opacity"
+            className="fixed inset-0 z-40 bg-black/40 transition-opacity"
             onClick={() => setSidebarOpen(false)}
           ></div>
           {/* Sidebar */}
