@@ -140,7 +140,7 @@ const AdminLayout = () => {
                 </button>
               )}
               <div className="flex-shrink-0 flex items-center">
-                <Link to="/" className="sm:text-2xl text-lg font-bold transition-colors duration-200">
+                <Link to="/" className="sm:text-2xl text-lg font-bold text-black dark:text-white">
                   <img src="/favicon.png" alt="Beehive Logo" className="sm:h-8 sm:w-8 inline-block sm:mr-2 mr-1 h-6 w-6" />
                   Beehive <span className="text-yellow-500 align-super sm:text-sm text-xs">Admin</span>
                 </Link>

@@ -55,13 +55,26 @@ const GradientBackground = () => (
 );
 
 const AuthLayout = () => {
-  // const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden bg-yellow-200">
+    <div className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden bg-yellow-200 dark:bg-gray-900">
       {/* Background Effects */}
       <GradientBackground />
       {/* <FloatingParticles /> */}
+      
+      {/* Theme Toggle */}
+      <button
+        onClick={toggleTheme}
+        className="absolute top-4 right-4 p-2 rounded-lg bg-white/20 hover:bg-white/30 dark:bg-black/20 dark:hover:bg-black/30 backdrop-blur-sm transition-colors duration-200 z-20"
+        aria-label="Toggle theme"
+      >
+        {theme === 'dark' ? (
+          <SunIcon className="h-5 w-5 text-gray-800 dark:text-gray-200" />
+        ) : (
+          <MoonIcon className="h-5 w-5 text-gray-800 dark:text-gray-200" />
+        )}
+      </button>
       
       <SignedIn>
         <RedirectToSignIn />
