@@ -4,7 +4,7 @@
 1. The Login and authentication are supported by Clerk
 
 ### 2) User Upload Media
-1. User submits form to `POST /api/user/upload/{user_id}` with files, title, description, optional `audioData` and `sentiment`.
+1. User submits form to `POST /api/user/upload` with files, title, description, optional `audioData` and `sentiment`.
 2. Backend validates inputs and allowed extensions.
 3. Files saved to `static/uploads/`; optional audio decoded from base64 and saved.
 4. MongoDB `images` document inserted.
@@ -21,7 +21,7 @@
 3. Deletes MongoDB image document.
 
 ### 5) View User Uploads
-1. Client calls `GET /api/user/user_uploads/{user_id}`.
+1. Client calls `GET /api/user/user_uploads`.
 2. Backend returns list of images for the user.
 
 ### 6) Admin Dashboard Data

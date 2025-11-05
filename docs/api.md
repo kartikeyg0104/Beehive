@@ -11,7 +11,7 @@ Base URL (dev): `http://127.0.0.1:5000`
 
 ### User Uploads
 
-#### POST `/api/user/upload/{user_id}`
+#### POST `/api/user/upload`
 - **Description**: Upload one or more images or PDFs, with optional audio data.
 - **Auth**: Logged-in user.
 - **Content-Type**: `multipart/form-data`

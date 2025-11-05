@@ -7,6 +7,7 @@ import pathlib
 import re
 import sys
 import logging
+import magic
 from flask import Flask, abort, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory
 from flask_cors import CORS
 from bson import ObjectId
@@ -45,7 +46,18 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from oauth.config import ALLOWED_EMAILS, GOOGLE_CLIENT_ID
 
-ALLOWED_EXTENSIONS =  {'jpg', 'jpeg', 'png', 'gif', 'webp', 'heif', 'pdf'}
+ALLOWED_EXTENSIONS = {'jpg','jpeg','png','gif','webp','heif','pdf','avif'}
+
+ALLOWED_MIME_TYPES = {
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'image/heif', 'application/pdf', 'image/avif'
+}
+
+# Initialized global MIME detector
+try:
+    MAGIC = magic.Magic(mime=True)
+except Exception:
+    MAGIC = None
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app, resources={
@@ -62,6 +74,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 app.secret_key = 'beehive'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['PDF_THUMBNAIL_FOLDER'] = 'static/uploads/thumbnails/'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "client_secret.json")
 
@@ -74,8 +87,10 @@ flow = Flow.from_client_secrets_file(
     
 # Upload images 
 # Upload images 
-@app.route('/api/user/upload/<user_id>', methods=['POST'])
-def upload_images(user_id):
+@app.route('/api/user/upload', methods=['POST'])
+@require_auth
+def upload_images():
+    user_id = request.current_user['id']
     try:
         username = request.form.get('username', '')
         files = request.files.getlist('files')  # Supports multiple file uploads
@@ -100,6 +115,17 @@ def upload_images(user_id):
                 file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
                 if file_ext not in ALLOWED_EXTENSIONS:
                     return jsonify({'error': f'File type not allowed. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
+                
+                file.stream.seek(0) 
+                file_header = file.stream.read(2048)
+                file.stream.seek(0) 
+                mime = magic.Magic(mime=True)
+                file_mime_type = mime.from_buffer(file_header)
+
+                if file_mime_type not in ALLOWED_MIME_TYPES:
+                    return jsonify({
+                        'error': f'File content validation failed. Detected type "{file_mime_type}" is not allowed.'
+                    }), 400    
 
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -279,6 +305,7 @@ def edit_image(image_id):
         return jsonify({'error': f'Error updating image: {str(e)}'}), 500
 
 @app.route('/audio/<filename>')
+@require_auth
 def serve_audio(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
    
