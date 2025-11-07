@@ -582,7 +582,7 @@ const Landing = () => {
                   </label>
                   <input
                     type="text"
-                    id="name"
+                    id="name" placeholder="Enter your full name"
                     className="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border border-yellow-500 focus:ring-yellow-500"
                   />
                 </div>
@@ -592,7 +592,7 @@ const Landing = () => {
                   </label>
                   <input
                     type="email"
-                    id="email"
+                    id="email" placeholder="Enter your email address"
                     className="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border border-yellow-500 focus:ring-yellow-500"
                   />
                 </div>
@@ -601,7 +601,7 @@ const Landing = () => {
                     Message
                   </label>
                   <textarea
-                    id="message"
+                    id="message" placeholder="Write your message here..."
                     rows={4}
                     className="mt-1 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border border-yellow-500 focus:ring-yellow-500"
                   ></textarea>
