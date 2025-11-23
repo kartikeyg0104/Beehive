@@ -168,3 +168,9 @@ user_info.json
 
 
 .idea/
+# Backup files - prevent accidental commits of backup files
+*.bak
+*.backup
+*.tsx.backup  
+*.py.backup
+*.js.backup
