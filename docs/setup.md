@@ -103,7 +103,7 @@ Follow these steps to set up the project:
     # Admin Configuration (Required for admin access)
     ADMIN_EMAILS=admin1@example.com,admin2@example.com
 
-    # Clerk Authentication (⚠️ REQUIRED - App will not start without this)
+    # Clerk Authentication (REQUIRED - App will not start without this)
     CLERK_SECRET_KEY=your_clerk_secret_key
 
     # Flask Security (Optional - defaults to 'beehive' if not set)
@@ -117,7 +117,7 @@ Follow these steps to set up the project:
     4. Copy the **Secret key** (starts with `sk_`)
     5. Paste it as the value for `CLERK_SECRET_KEY` in your `.env` file
 
-    #### ⚠️ **Important Notes:**
+    #### **Important Notes:**
     - **CLERK_SECRET_KEY is mandatory**: The application will fail to start with a `ValueError` if this is missing
     - **No quotes needed**: Environment variable values should not be wrapped in quotes
     - **Keep it secure**: Never commit your `.env` file to version control (it's already in `.gitignore`)
@@ -136,7 +136,7 @@ Follow these steps to set up the project:
     # Admin Configuration (Required for admin access)
     ADMIN_EMAILS=admin1@example.com,admin2@example.com
 
-    # Clerk Authentication (⚠️ REQUIRED - App will not start without this)
+    # Clerk Authentication (REQUIRED - App will not start without this)
     CLERK_SECRET_KEY=your_clerk_secret_key
 
     # Flask Security (Optional - defaults to 'beehive' if not set)
@@ -150,7 +150,7 @@ Follow these steps to set up the project:
     4. Copy the **Secret key** (starts with `sk_`)
     5. Paste it as the value for `CLERK_SECRET_KEY` in your `.env` file
 
-    #### ⚠️ **Important Notes:**
+    #### **Important Notes:**
     - **CLERK_SECRET_KEY is mandatory**: The application will fail to start with a `ValueError` if this is missing
     - **No quotes needed**: Environment variable values should not be wrapped in quotes
     - **Keep it secure**: Never commit your `.env` file to version control (it's already in `.gitignore`)
