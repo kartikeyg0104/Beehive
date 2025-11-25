@@ -85,7 +85,7 @@ Follow these steps to set up the project:
     ```
       
       
-9. **Update `.env` File** ⚠️ **CRITICAL STEP**
+9. **Update `.env` File** 
 
     Open the `.env` file and add the required credentials. **All environment variables below are mandatory** for the application to function properly.
 
