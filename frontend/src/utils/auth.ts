@@ -2,8 +2,15 @@ import { jwtDecode } from "jwt-decode";
 
 const TOKEN_KEY = "access_token";
 
+/**
+ * Custom event name dispatched whenever the token changes.
+ * useAuth subscribes to this so components re-render reactively.
+ */
+export const AUTH_CHANGE_EVENT = "auth-change";
+
 export function saveToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token);
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
 export function getToken(): string | null {
@@ -12,6 +19,7 @@ export function getToken(): string | null {
 
 export function logout() {
   localStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
 export function isAuthenticated(): boolean {
